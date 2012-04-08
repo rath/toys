@@ -25,4 +25,4 @@ then,
 	aws.id=YOUR_ACCESS_KEY_ID
 	aws.secret=YOUR_SECRET_ACCESS_KEY
 
-
+You can override these credentials by setting environment variable named *AWS_ACCESS_ID* and *AWS_ACCESS_SECRET*.
