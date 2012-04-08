@@ -4,25 +4,25 @@ require 'base64'
 require 'openssl'
 
 AUTH_FILENAME = "#{ENV['HOME']}/.aws_access"
-HOST = "sns.eu-west-1.amazonaws.com"
-TOPIC_ARN = "arn:aws:sns:eu-west-1:437689842035:build"
 
 #
 # AWS access keys in $HOME/.aws_access
 #
 # aws.id=AK492381738DSD
 # aws.secret=H32ABCDBAFE3287328742873273827
-access = {}
+config = {}
 open(AUTH_FILENAME).readlines.map {|line| 
 	key, value = line.strip.split '=', 2
-	access[key] = value
+	config[key] = value
 } if File::exist? AUTH_FILENAME 
 
 #
 # Overwrite access keys when environment variables exists 
 #
-access['aws.id'] = ENV['AWS_ACCESS_ID'] if ENV['AWS_ACCESS_ID'] 
-access['aws.secret'] = ENV['AWS_ACCESS_SECRET'] if ENV['AWS_ACCESS_SECRET'] 
+config['aws.id'] = ENV['AWS_ACCESS_ID'] if ENV['AWS_ACCESS_ID'] 
+config['aws.secret'] = ENV['AWS_ACCESS_SECRET'] if ENV['AWS_ACCESS_SECRET'] 
+config['aws.sns.host'] = ENV['AWS_SNS_HOST'] if ENV['AWS_SNS_HOST']
+config['aws.sns.topic'] = ENV['AWS_SNS_TOPIC'] if ENV['AWS_SNS_TOPIC']
 
 #
 # Pipe 
@@ -44,8 +44,8 @@ end
 subject = 'Build complete'
 
 params = { 
-	'Subject' => subject, 'TopicArn' => TOPIC_ARN, 'Message' => message, 
-	'AWSAccessKeyId' => access['aws.id'], 'Action' => 'Publish', 
+	'Subject' => subject, 'TopicArn' => config['aws.sns.topic'], 'Message' => message, 
+	'AWSAccessKeyId' => config['aws.id'], 'Action' => 'Publish', 
 	'SignatureVersion' => '2', 'SignatureMethod' => 'HmacSHA256', 
 	'Timestamp' => Time.now.getutc.strftime('%Y-%m-%dT%H:%M:%S.000Z')
 }
@@ -58,11 +58,11 @@ def sorted(params)
 	out[1..-1]
 end 
 
-to_sign = "GET\n#{HOST}\n/\n#{sorted(params)}"
-signature = Base64.encode64(OpenSSL::HMAC.digest('sha256', access['aws.secret'], to_sign))
+to_sign = "GET\n#{config['aws.sns.host']}\n/\n#{sorted(params)}"
+signature = Base64.encode64(OpenSSL::HMAC.digest('sha256', config['aws.secret'], to_sign))
 params['Signature'] = signature
 
-uri = URI.parse("https://#{HOST}/?#{sorted(params)}")
+uri = URI.parse("https://#{config['aws.sns.host']}/?#{sorted(params)}")
 http = Net::HTTP.new(uri.host, uri.port)
 http.use_ssl = true 
 http.verify_mode = OpenSSL::SSL::VERIFY_NONE
