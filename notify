@@ -1,0 +1,71 @@
+#!/usr/bin/env ruby
+require 'net/https'
+require 'base64'
+require 'openssl'
+
+AUTH_FILENAME = "#{ENV['HOME']}/.aws_access"
+HOST = "sns.eu-west-1.amazonaws.com"
+TOPIC_ARN = "arn:aws:sns:eu-west-1:437689842035:build"
+
+#
+# AWS access keys in $HOME/.aws_access
+#
+# aws.id=AK492381738DSD
+# aws.secret=H32ABCDBAFE3287328742873273827
+access = {}
+open(AUTH_FILENAME).readlines.map {|line| 
+	key, value = line.strip.split '=', 2
+	access[key] = value
+} if File::exist? AUTH_FILENAME 
+
+#
+# Overwrite access keys when environment variables exists 
+#
+access['aws.id'] = ENV['AWS_ACCESS_ID'] if ENV['AWS_ACCESS_ID'] 
+access['aws.secret'] = ENV['AWS_ACCESS_SECRET'] if ENV['AWS_ACCESS_SECRET'] 
+
+#
+# Pipe 
+#
+time_start = Time.now
+begin
+	while true
+		print STDIN.readline
+	end
+rescue EOFError => e 
+end
+elapsed = Time.now - time_start
+
+# Build message 
+message = "Done in #{elapsed} secs"
+if ARGV.length > 0 
+	message = ARGV.slice(0..-1).join(' ') + "\n\n#{message}"
+end
+subject = 'Build complete'
+
+params = { 
+	'Subject' => subject, 'TopicArn' => TOPIC_ARN, 'Message' => message, 
+	'AWSAccessKeyId' => access['aws.id'], 'Action' => 'Publish', 
+	'SignatureVersion' => '2', 'SignatureMethod' => 'HmacSHA256', 
+	'Timestamp' => Time.now.getutc.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+}
+
+def sorted(params) 
+	out = '' 
+	params.keys.sort.each { |key| 
+		out += "&#{key}=#{URI.escape(params[key].strip).gsub('=', '%3D').gsub(':', '%3A')}" 
+	}
+	out[1..-1]
+end 
+
+to_sign = "GET\n#{HOST}\n/\n#{sorted(params)}"
+signature = Base64.encode64(OpenSSL::HMAC.digest('sha256', access['aws.secret'], to_sign))
+params['Signature'] = signature
+
+uri = URI.parse("https://#{HOST}/?#{sorted(params)}")
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = true 
+http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+req = Net::HTTP::Get.new(uri.request_uri)
+res = http.request(req)
+puts message
