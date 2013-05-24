@@ -1,0 +1,119 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+  Trace and report shell command
+
+  @author Jang-Ho Hwang <rath@xrath.com>
+  @version 0.1, 2013-05-24 04:40
+"""
+import os
+import sys
+import time
+import collections
+
+import smtplib
+import ConfigParser
+
+RECENT_OUTPUT_LINES = 50
+
+# /etc/report.conf 
+
+def cf(path): 
+    exist = os.path.exists(path) 
+    if exist:   
+        return path
+    return None
+
+GOOGLE_USERNAME = ''
+GOOGLE_PASSWORD = ''
+FROM_NAME = ''
+TARGET_EMAIL = ''
+
+"""
+[Credential]
+google.username=reporter@mydomain.com
+google.password=*********
+
+[Report]
+from.name=Reporter
+target.email=sysadmin@mydomain.com
+"""
+config = ConfigParser.ConfigParser()
+config.read(
+    cf(".report.conf") or
+    cf("%s/.report.conf" % (os.envion['HOME'])) or
+    cf("/etc/report.conf"))
+
+GOOGLE_USERNAME = config.get('Credential', 'google.username')
+GOOGLE_PASSWORD = config.get('Credential', 'google.password')
+FROM_NAME = config.get('Report', 'from.name')
+TARGET_EMAIL = config.get('Report', 'target.email')
+
+smtp = smtplib.SMTP('smtp.gmail.com', 587)
+smtp.starttls()
+smtp.login(GOOGLE_USERNAME, GOOGLE_PASSWORD)
+smtp.close()
+
+def get_target_pid():
+    ret = 0
+    stream = os.popen("ps -eo pid,ppid")
+    stream.readline() # skip header 
+    for line in stream.readlines():
+        pid, ppid = map(int, line.split())
+        if pid==os.getpid():
+            continue
+        if ppid==os.getppid():
+            ret = pid
+            break
+    stream.close()
+    return ret
+
+
+def get_cmdline(pid):
+    stream = os.popen("ps -p %d -o command" % (pid))
+    stream.readline() # skip header
+    ret = stream.readline().strip()
+    stream.close()
+
+    i0 = ret.rfind('/')
+    if not i0==-1:
+        ret = ret[i0+1:]
+    return ret
+
+
+target_cmdline = get_cmdline(get_target_pid())
+
+time_start = time.time()
+recent_outputs = collections.deque(maxlen=RECENT_OUTPUT_LINES)
+while True:
+    line = sys.stdin.readline()
+    if line=='': 
+        break 
+    line = line.strip()
+    recent_outputs.append(">> %s" % (line))
+    print line
+time_end = time.time()
+
+
+# TODO: Don't send email if (end-start) < 10s 
+subject = "%s" % (target_cmdline)
+body = '\n'.join(recent_outputs)
+
+smtp = smtplib.SMTP('smtp.gmail.com', 587)
+smtp.starttls()
+smtp.ehlo()
+smtp.login(GOOGLE_USERNAME, GOOGLE_PASSWORD)
+smtp.sendmail(GOOGLE_USERNAME, TARGET_EMAIL, 
+    """To: %s
+From: %s <%s>
+Content-Type: text/html; charset=utf-8
+Subject: %s
+
+Recent %d lines
+<pre style="font-family: Courier New; font-size: 0.92em;">
+%s
+</pre>
+Elapsed time: %2.1f seconds
+""" % (TARGET_EMAIL, FROM_NAME, GOOGLE_USERNAME, subject, 
+    RECENT_OUTPUT_LINES, body, (time_end-time_start)))
+smtp.close()
