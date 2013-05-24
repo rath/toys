@@ -3,7 +3,7 @@
 """
   Trace and report shell command
 
-  Usage: $ innobackupex --user=melong --password=secret /mnt/backup | report 
+  Usage: $ a-very-long-running-job 2>&1 | report 
 
   @author Jang-Ho Hwang <rath@xrath.com>
   @version 0.1, 2013-05-24 04:40
