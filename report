@@ -103,7 +103,7 @@ Recent %d lines
 </pre>
 Elapsed time: %2.1f seconds
 """ % (TARGET_EMAIL, FROM_NAME, GOOGLE_USERNAME, subject, 
-        RECENT_OUTPUT_LINES, body, (time_end-time_start)))
+        RECENT_OUTPUT_LINES, body, elapsed))
     smtp.close()
 
 
