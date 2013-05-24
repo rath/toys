@@ -1,11 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-  Trace and report shell command
+  Run this with your long running shell command by pipe, 
+  then it will send a short report by email.
 
-  Usage: $ a-very-long-running-job 2>&1 | report 
-  Install: bash <(curl -s https://raw.github.com/rath/toys/master/install_report.sh)
-  Config lookup order:
+  * Usage
+    $ a-very-long-running-job 2>&1 | report 
+
+  * Install
+    $ bash <(curl -s https://raw.github.com/rath/toys/master/install_report.sh)
+
+  * Config lookup order
     1. inline (CONFIG_TEMPLATE)
     2. ./.report.conf 
     3. $HOME/.report.conf
