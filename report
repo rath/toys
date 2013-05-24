@@ -4,6 +4,11 @@
   Trace and report shell command
 
   Usage: $ a-very-long-running-job 2>&1 | report 
+  Config lookup order:
+    1. inline (CONFIG_TEMPLATE)
+    2. ./.report.conf 
+    3. $HOME/.report.conf
+    4. /etc/report.conf
 
   @author Jang-Ho Hwang <rath@xrath.com>
   @version 0.1, 2013-05-24 04:40
@@ -14,34 +19,37 @@ import time
 import collections
 
 import smtplib
+import StringIO
+import md5
 import ConfigParser
 
 RECENT_OUTPUT_LINES = 50
-
-# /etc/report.conf 
-
-def cf(path): 
-    exist = os.path.exists(path) 
-    if exist:   
-        return path
-    return None
 
 GOOGLE_USERNAME = ''
 GOOGLE_PASSWORD = ''
 FROM_NAME = ''
 TARGET_EMAIL = ''
 
-"""
+CONFIG_TEMPLATE = """
 [Credential]
-google.username=reporter@mydomain.com
-google.password=*********
+google.username=report@mydomain.com
+google.password=********
 
 [Report]
 from.name=Reporter
 target.email=sysadmin@mydomain.com
 """
+inline_config = None
+if not md5.new(CONFIG_TEMPLATE).hexdigest()=='7527cd83b85ff9b4e788dc6df3a95698':
+    inline_config = StringIO.StringIO(CONFIG_TEMPLATE)
+
+def cf(path): 
+    if os.path.exists(path):
+        return open(path) # break open-close principle hehe 
+    return None
+
 config = ConfigParser.ConfigParser()
-config.read(
+config.readfp(inline_config or 
     cf(".report.conf") or
     cf("%s/.report.conf" % (os.environ['HOME'])) or
     cf("/etc/report.conf"))
@@ -51,6 +59,7 @@ GOOGLE_PASSWORD = config.get('Credential', 'google.password')
 FROM_NAME = config.get('Report', 'from.name')
 TARGET_EMAIL = config.get('Report', 'target.email')
 
+# Test config before executing long running job 
 smtp = smtplib.SMTP('smtp.gmail.com', 587)
 smtp.starttls()
 smtp.login(GOOGLE_USERNAME, GOOGLE_PASSWORD)
@@ -82,31 +91,13 @@ def get_cmdline(pid):
         ret = ret[i0+1:]
     return ret
 
-
-target_cmdline = get_cmdline(get_target_pid())
-
-time_start = time.time()
-recent_outputs = collections.deque(maxlen=RECENT_OUTPUT_LINES)
-while True:
-    line = sys.stdin.readline()
-    if line=='': 
-        break 
-    line = line.strip()
-    recent_outputs.append(">> %s" % (line))
-    print line
-time_end = time.time()
-
-
-# TODO: Don't send email if (end-start) < 10s 
-subject = "%s" % (target_cmdline)
-body = '\n'.join(recent_outputs)
-
-smtp = smtplib.SMTP('smtp.gmail.com', 587)
-smtp.starttls()
-smtp.ehlo()
-smtp.login(GOOGLE_USERNAME, GOOGLE_PASSWORD)
-smtp.sendmail(GOOGLE_USERNAME, TARGET_EMAIL, 
-    """To: %s
+def send_report(subject, body, elapsed):
+    smtp = smtplib.SMTP('smtp.gmail.com', 587)
+    smtp.starttls()
+    smtp.ehlo()
+    smtp.login(GOOGLE_USERNAME, GOOGLE_PASSWORD)
+    smtp.sendmail(GOOGLE_USERNAME, TARGET_EMAIL, 
+"""To: %s
 From: %s <%s>
 Content-Type: text/html; charset=utf-8
 Subject: %s
@@ -117,5 +108,25 @@ Recent %d lines
 </pre>
 Elapsed time: %2.1f seconds
 """ % (TARGET_EMAIL, FROM_NAME, GOOGLE_USERNAME, subject, 
-    RECENT_OUTPUT_LINES, body, (time_end-time_start)))
-smtp.close()
+        RECENT_OUTPUT_LINES, body, (time_end-time_start)))
+    smtp.close()
+
+
+if __name__=='__main__':
+    target_cmdline = get_cmdline(get_target_pid())
+
+    recent_outputs = collections.deque(maxlen=RECENT_OUTPUT_LINES)
+    time_start = time.time()
+    while True:
+        line = sys.stdin.readline()
+        if line=='': 
+            break 
+        line = line.strip()
+        recent_outputs.append(">> %s" % (line))
+        print line
+    elapsed = time.time() - time_start
+
+    if elapsed > 3.0:
+        subject = "%s" % (target_cmdline)
+        body = '\n'.join(recent_outputs)
+        send_report(subject, body, elapsed_time)
