@@ -4,6 +4,7 @@
   Trace and report shell command
 
   Usage: $ a-very-long-running-job 2>&1 | report 
+  Install: bash <(curl -s https://raw.github.com/rath/toys/master/install_report.sh)
   Config lookup order:
     1. inline (CONFIG_TEMPLATE)
     2. ./.report.conf 
@@ -17,18 +18,12 @@ import os
 import sys
 import time
 import collections
-
 import smtplib
 import StringIO
 import md5
 import ConfigParser
 
 RECENT_OUTPUT_LINES = 50
-
-GOOGLE_USERNAME = ''
-GOOGLE_PASSWORD = ''
-FROM_NAME = ''
-TARGET_EMAIL = ''
 
 CONFIG_TEMPLATE = """
 [Credential]
