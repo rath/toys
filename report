@@ -59,12 +59,6 @@ GOOGLE_PASSWORD = config.get('Credential', 'google.password')
 FROM_NAME = config.get('Report', 'from.name')
 TARGET_EMAIL = config.get('Report', 'target.email')
 
-# Test config before executing long running job 
-smtp = smtplib.SMTP('smtp.gmail.com', 587)
-smtp.starttls()
-smtp.login(GOOGLE_USERNAME, GOOGLE_PASSWORD)
-smtp.close()
-
 def get_target_pid():
     ret = 0
     stream = os.popen("ps -eo pid,ppid")
@@ -113,16 +107,22 @@ Elapsed time: %2.1f seconds
 
 
 if __name__=='__main__':
-    target_cmdline = get_cmdline(get_target_pid())
+    # Test config before executing long running job 
+    smtp = smtplib.SMTP('smtp.gmail.com', 587)
+    smtp.starttls()
+    smtp.login(GOOGLE_USERNAME, GOOGLE_PASSWORD)
+    smtp.close()
 
+
+    target_cmdline = get_cmdline(get_target_pid())
     recent_outputs = collections.deque(maxlen=RECENT_OUTPUT_LINES)
     time_start = time.time()
     while True:
         line = sys.stdin.readline()
         if line=='': 
             break 
-        line = line.strip()
-        recent_outputs.append(">> %s" % (line))
+        line = line.rstrip()
+        recent_outputs.append(">> %s" % line)
         print line
     elapsed = time.time() - time_start
 
