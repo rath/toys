@@ -80,9 +80,10 @@ def get_cmdline(pid):
     ret = stream.readline().strip()
     stream.close()
 
-    i0 = ret.rfind('/')
-    if not i0==-1:
-        ret = ret[i0+1:]
+# TODO: eh, bad implementation :( 
+#    i0 = ret.rfind('/')
+#    if not i0==-1:
+#        ret = ret[i0+1:]
     return ret
 
 def send_report(subject, body, elapsed):
