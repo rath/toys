@@ -127,7 +127,7 @@ if __name__=='__main__':
         print line
     elapsed = time.time() - time_start
 
-    if elapsed > 3.0:
+    if elapsed > 2.0:
         subject = "%s" % (target_cmdline)
         body = '\n'.join(recent_outputs)
-        send_report(subject, body, elapsed_time)
+        send_report(subject, body, elapsed)
