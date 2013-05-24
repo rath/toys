@@ -41,7 +41,7 @@ target.email=sysadmin@mydomain.com
 config = ConfigParser.ConfigParser()
 config.read(
     cf(".report.conf") or
-    cf("%s/.report.conf" % (os.envion['HOME'])) or
+    cf("%s/.report.conf" % (os.environ['HOME'])) or
     cf("/etc/report.conf"))
 
 GOOGLE_USERNAME = config.get('Credential', 'google.username')
