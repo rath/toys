@@ -25,7 +25,7 @@ import time
 import collections
 import smtplib
 import StringIO
-import md5
+import hashlib
 import ConfigParser
 
 RECENT_OUTPUT_LINES = 50
@@ -40,7 +40,7 @@ from.name=Reporter
 target.email=sysadmin@mydomain.com
 """
 inline_config = None
-if not md5.new(CONFIG_TEMPLATE).hexdigest()=='7527cd83b85ff9b4e788dc6df3a95698':
+if not hashlib.md5(CONFIG_TEMPLATE).hexdigest()=='7527cd83b85ff9b4e788dc6df3a95698':
     inline_config = StringIO.StringIO(CONFIG_TEMPLATE)
 
 def cf(path): 
