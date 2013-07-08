@@ -1,0 +1,57 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*- 
+FLIP_MAP = """
+a - ɐ
+b - q
+c - ɔ
+d - p
+e - ə,∃
+f - ɟ,Ⅎ
+g - ƃ
+h - ɥ,H
+i - ı,I
+j - ɾ
+k - ʞ
+l - l
+m - ɯ
+n - u
+o - o
+p - d
+q - b
+r - ɹ
+s - s 
+t - ʇ
+u - n
+v - ʌ
+w - ʍ
+x - x
+y - ʎ
+z - z
+"""
+
+d = {}
+for record in FLIP_MAP.split('\n'):
+    record = record.strip()
+    if not record:
+        continue
+    ch_source, ch_value = record.split('-')
+    key = ch_source.strip()
+    values = ch_value.strip().split(',')
+    d[key] = {'lower': values[0]}
+    if len(values)>1:
+        d[key]['upper'] = values[1]
+
+import sys
+
+input_text = sys.argv[1]
+for input_ch in input_text[::-1]:
+    k = input_ch.lower()
+    if k in d:
+        flip_tuple = d[k]
+        if input_ch.isupper() and len(flip_tuple)>1:
+            sys.stdout.write(flip_tuple['upper'])
+        else:
+            sys.stdout.write(flip_tuple['lower'])
+    else:
+        sys.stdout.write(input_ch)
+
