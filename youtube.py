@@ -50,30 +50,27 @@ class AudioClip:
 class YouTube:
   def __init__(self, url):
     self.page = self.__download_page(url) 
-    self.audioClips = []
     match = re.search('"adaptive_fmts": "(.*?)"', self.page)
     if not match:
       match = re.search('"url_encoded_fmt_stream_map": "(.*?)"', self.page)
+    self.audioClips = []
     self.audioClips = filter(lambda x:x and x.bitrate > 128000, [AudioClip.parse(x) for x in re.sub(r'\\u([0-9]{4})', lambda x: chr(int(x.group(1),16)), match.group(1)).split(',')])
 
-  def audio(self, high_quality=False):
-    if high_quality:
-      return self.audioClips[-1]
+  def audio(self):
     return self.audioClips[0]
 
   def __download_page(self, url):
     f = StringIO.StringIO()
-    def callback_write(chunk):
-      f.write(chunk)
     c = pycurl.Curl()
     c.setopt(pycurl.URL, url)
     c.setopt(pycurl.FOLLOWLOCATION, 1)
-    c.setopt(pycurl.WRITEFUNCTION, callback_write)
+    c.setopt(pycurl.WRITEFUNCTION, f.write)
     c.perform()
     c.close()
     return f.getvalue()
 
 
 if __name__=='__main__':
-  YouTube(sys.argv[1]).audio(high_quality=False).download('my.aac')
+  url = sys.argv[1] # http://www.youtube.com/watch?v=zg9tf87MdiM
+  YouTube(url).audio().download('my.aac')
 
