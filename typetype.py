@@ -27,7 +27,7 @@ def chr_if_possible(p):
 class StateMachine:
   def __init__(self, window):
     self.window = window
-    self.x = 0
+    self.x = 1
     self.y = 2
     self.key_buffer = []
     self.timestamps = []
@@ -57,18 +57,24 @@ class StateMachine:
     self.timestamps.pop()
   
   def newline(self):
-    if self.x==0:
+    if self.x==1:
       return
-    self.x = 0
+    self.x = 1
     self.history.append(self.key_buffer)
     self.result()
     self.key_buffer = []
     self.timestamps = []
     self.y += 1 
 
+  def redraw_keybuffer(self):
+    i = 1
+    for ch in self.key_buffer:
+      self.window.addch(self.y, i, ch)
+      i += 1
+
   def reset(self): # C-u
     typed = self.x
-    self.x = 0
+    self.x = 1
     self.key_buffer = []
     self.timestamps = []
     return typed
@@ -101,8 +107,9 @@ def main(stdscr):
   curses.noecho()
   curses.cbreak()
   stdscr.clear()
+  stdscr.border()
 
-  stdscr.addstr(0, 0, "# " + sentences[0])
+  stdscr.addstr(1, 1, "# " + sentences[0])
   curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
   curses.init_pair(2, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
 
@@ -121,14 +128,17 @@ def main(stdscr):
       stdscr.addch(sm.y, sm.x, ' ')
       continue
     if key==0x15: # C-u (reset)
-      for x in range(sm.reset()):
+      for x in range(1, sm.reset()):
         stdscr.addch(sm.y, x, ' ')
       continue
 
     ch = chr_if_possible(key)
     if not ch:
       if key==0x19a: # screen bounds resized
-        stdscr.refresh()
+        stdscr.clear()
+        stdscr.border()
+        stdscr.addstr(1, 1, "# " + sentences[0])
+        sm.redraw_keybuffer()
         continue
     if printable.match(ch):
       if not sm.can_type(ch):
