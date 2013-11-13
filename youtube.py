@@ -64,7 +64,9 @@ class MediaClip:
       extra_options += ' -ss "%s"' % start_time
     
     tmp = 'intermediate.m4a'
-    os.system('ffmpeg -i "%s" -y -vn -ab %d %s "%s"' % (self.localFilePath, self.bitrate, extra_options, tmp))
+    ret = os.system('ffmpeg -i "%s" -y -vn -ab %d %s "%s"' % (self.localFilePath, self.bitrate, extra_options, tmp))
+    if not ret==0:
+      raise Exception("ffmpeg failed")
     shutil.move(tmp, self.localFilePath)
 
     from mutagen.mp4 import MP4, MP4Cover
@@ -127,14 +129,14 @@ class YouTube:
     self.clips = [MediaClip.parse(x) for x in re.sub(r'\\u([0-9]{4})', lambda x: chr(int(x.group(1),16)), match.group(1)).split(',')]
     for clip in self.clips:
       clip.page = self.page
-    self.audioClips = filter(lambda x:x and x.bitrate > 128000, self.clips)
+    self.audioClips = filter(lambda x:x and x.type.find('audio')!=-1, self.clips)
 
   def audio(self):
     if len(self.audioClips)==0:
       c = filter(lambda x: x.quality=='medium', self.clips)[1]
-      print c 
       return c
-    return self.audioClips[0]
+    c = self.audioClips[0]
+    return c
 
   def __download_page(self):
     f = StringIO.StringIO()
