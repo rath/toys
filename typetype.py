@@ -126,7 +126,10 @@ def main(stdscr):
       continue
 
     ch = chr_if_possible(key)
-
+    if not ch:
+      if key==0x19a: # screen bounds resized
+        stdscr.refresh()
+        continue
     if printable.match(ch):
       if not sm.can_type(ch):
         log('beep!')
