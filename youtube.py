@@ -10,28 +10,38 @@ import pycurl
 import StringIO
 import shutil
 
+VERBOSE = False
 
-class AudioClip:
+class MediaClip:
   def __init__(self):
     self.page = None
     self.url = ''
     self.type = ''
-    self.bitrate = ''
+    self.bitrate = 0
     self.localFilePath = None
+    self.quality = None
+    self.screensize = None
 
   def download(self, dest):
     if not dest:
       dest = "%s.m4a" % re.search(r'property="og:title" content="(.*?)"',self.page).group(1)
+      dest = re.sub('/', '', dest)
 
     with open(dest, 'wb') as f:
       c = pycurl.Curl()
       c.setopt(pycurl.URL, self.url)
+      if VERBOSE:
+        c.setopt(pycurl.VERBOSE, 1)
       c.setopt(pycurl.FOLLOWLOCATION, 1)
       c.setopt(pycurl.WRITEFUNCTION, f.write)
       c.setopt(pycurl.NOPROGRESS, 0)
       c.setopt(pycurl.HTTPHEADER, ['Referer: %s' % self.url, 'Origin: http://www.youtube.com'])
       c.perform()
+      rescode = c.getinfo(pycurl.RESPONSE_CODE)
       c.close()
+    
+    if rescode/100==4:
+      raise Exception('HTTP Error: %d, url=%s' % (rescode, self.url))
     self.localFilePath = dest
     return self
 
@@ -40,14 +50,21 @@ class AudioClip:
     self.localFilePath = dest
     return self
 
-  def normalize(self):
+  def normalize(self, start_time=None):
     """
     Normalizing needs mutagen module and ffmpeg.
+
+    @start_time start time as string '00:04:11.2', it'll passed to ffmpeg as -ss option.
     """
     if not self.localFilePath:
       raise Exception('please download first')
+
+    extra_options = ''
+    if start_time:
+      extra_options += ' -ss "%s"' % start_time
+    
     tmp = 'intermediate.m4a'
-    os.system('ffmpeg -i "%s" -y -ab %d "%s"' % (self.localFilePath, self.bitrate, tmp))
+    os.system('ffmpeg -i "%s" -y -vn -ab %d %s "%s"' % (self.localFilePath, self.bitrate, extra_options, tmp))
     shutil.move(tmp, self.localFilePath)
 
     from mutagen.mp4 import MP4, MP4Cover
@@ -58,6 +75,8 @@ class AudioClip:
 
     cover_data = StringIO.StringIO()
     c = pycurl.Curl()
+    if VERBOSE:
+      c.setopt(pycurl.VERBOSE, 1)
     c.setopt(pycurl.URL, re.search(r'property="og:image" content="(.*?)"',self.page).group(1))
     c.setopt(pycurl.WRITEFUNCTION, cover_data.write)
     c.perform()
@@ -73,20 +92,25 @@ class AudioClip:
 
   @staticmethod
   def parse(format_raw):
-    clip = AudioClip()
+    clip = MediaClip()
     for k, v in [kv.split('=',2) for kv in format_raw.split('&')]:
+      if VERBOSE and k != 'url':
+        print k, urllib.unquote(v)
+
       if k=='url':
         clip.url = urllib.unquote(v)
       elif k=='bitrate':
         clip.bitrate = int(v)
+      elif k=='quality':
+        clip.quality = v
       elif k=='type':
         clip.type = urllib.unquote(v).split(';')[0]
-      elif k=='size': # Skip video clips
-        return None
+      elif k=='size': 
+        clip.screensize = v
     return clip
 
   def __str__(self):
-    return "AudioClip: %dk/%s %s" % (self.bitrate/1000, self.type, self.url)
+    return "MediaClip: %s/%s" % (self.bitrate, self.type)
 
   def __repr__(self):
     return self.__str__()
@@ -99,18 +123,25 @@ class YouTube:
     match = re.search('"adaptive_fmts": "(.*?)"', self.page)
     if not match:
       match = re.search('"url_encoded_fmt_stream_map": "(.*?)"', self.page)
-    self.audioClips = []
-    self.audioClips = filter(lambda x:x and x.bitrate > 128000, [AudioClip.parse(x) for x in re.sub(r'\\u([0-9]{4})', lambda x: chr(int(x.group(1),16)), match.group(1)).split(',')])
-    for clip in self.audioClips:
+
+    self.clips = [MediaClip.parse(x) for x in re.sub(r'\\u([0-9]{4})', lambda x: chr(int(x.group(1),16)), match.group(1)).split(',')]
+    for clip in self.clips:
       clip.page = self.page
+    self.audioClips = filter(lambda x:x and x.bitrate > 128000, self.clips)
 
   def audio(self):
+    if len(self.audioClips)==0:
+      c = filter(lambda x: x.quality=='medium', self.clips)[1]
+      print c 
+      return c
     return self.audioClips[0]
 
   def __download_page(self):
     f = StringIO.StringIO()
     c = pycurl.Curl()
     c.setopt(pycurl.URL, self.url)
+    if VERBOSE:
+      c.setopt(pycurl.VERBOSE, 1)
     c.setopt(pycurl.FOLLOWLOCATION, 1)
     c.setopt(pycurl.WRITEFUNCTION, f.write)
     c.perform()
@@ -119,10 +150,38 @@ class YouTube:
 
 
 if __name__=='__main__':
-  url = sys.argv[1] # http://www.youtube.com/watch?v=zg9tf87MdiM
+  import getopt
+  try:
+    opts, args = getopt.getopt(sys.argv[1:], "u:o:s:v", \
+      ['url=', 'output=', 'start', 'verbose'])
+  except getopt.GetoptError as err:
+    print(err)
+    sys.exit(1)
+
+  url = None
   local_file = None
-  if len(sys.argv)>=3:
-    local_file = sys.argv[2]
-  #YouTube(url).audio().download(local_file)
-  YouTube(url).audio().download(local_file).normalize().copy_to_itunes()
+  start_time = None
+  for k, v in opts:
+    if k in ('-u', '--url'):
+      url = v 
+    elif k in ('-o', '--output'):
+      local_file = v
+    elif k in ('-s', '--starttime'):
+      start_time = v
+    elif k in ('-v', '--verbose'):
+      VERBOSE = True
+
+  if not url:
+    raise Exception("--url option is mandatory")
+      
+  y = YouTube(url)
+  clip = y.audio()
+  try:
+    clip.download(local_file)
+  except Exception as e:
+    with open('page_for_debug.html', 'w') as f:
+      f.write(clip.page)
+    raise e
+  clip.normalize(start_time)
+  clip.copy_to_itunes()
 
