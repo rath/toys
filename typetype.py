@@ -168,7 +168,7 @@ def clear_line(window, y):
 def redraw_histories(stdscr, datas):
   height, width = stdscr.getmaxyx()
 
-  start_y = 4 
+  start_y = 1 
   last_y = height-3
   x_sentence = 14
   
@@ -176,7 +176,7 @@ def redraw_histories(stdscr, datas):
   lines = 0
   for item in datas[::-1]:
     lines += 1
-    if lines > height-8:
+    if lines > height-5:
       break
 
     # Clear line 
