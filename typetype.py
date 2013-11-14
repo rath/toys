@@ -13,6 +13,9 @@ sentences = [
 ]
 
 DEBUG = True
+THRESHOLD_INFO  =  60
+THRESHOLD_WARN  = 170
+THRESHOLD_FATAL = 240
 
 def log(value):
   if DEBUG:
@@ -24,14 +27,23 @@ def chr_if_possible(p):
     return chr(p)
   return None
 
-class StateMachine:
+
+class History:
+  def __init__(self):
+    self.sentence = None
+    self.elapsed = 0.0
+    self.cpm = 0
+    self.diffs = []
+    self.offset_warn = {}
+    self.offset_fatal = {}
+
+class InputField:
   def __init__(self, window):
     self.window = window
-    self.x = 1
-    self.y = 2
+    self.x = 0
+    self.y = 0
     self.key_buffer = []
     self.timestamps = []
-    self.history = []
     self.strict = None
 
   def set_strict(self, line):
@@ -44,7 +56,11 @@ class StateMachine:
       return True
     return False
 
+  def getch(self):
+    return self.window.getch(self.y, self.x)
+
   def add(self, ch):
+    self.window.addch(self.y, self.x, ch)
     self.x += 1 
     self.key_buffer.append(ch)
     self.timestamps.append(time.time())
@@ -55,98 +71,205 @@ class StateMachine:
     self.x -= 1
     self.key_buffer.pop()
     self.timestamps.pop()
+    self.window.addch(self.y, self.x, ' ')
   
-  def newline(self):
-    if self.x==1:
-      return
-    self.x = 1
-    self.history.append(self.key_buffer)
-    self.result()
-    self.key_buffer = []
-    self.timestamps = []
-    self.y += 1 
-
   def redraw_keybuffer(self):
-    i = 1
+    i = 0
     for ch in self.key_buffer:
       self.window.addch(self.y, i, ch)
       i += 1
 
   def reset(self): # C-u
     typed = self.x
-    self.x = 1
+    self.x = 0
     self.key_buffer = []
     self.timestamps = []
+    # count how many times user try to reset 
+    for x in range(self.x, typed):
+      self.window.addch(self.y, x, ' ')
     return typed
 
-  def result(self):
+  def __init_buffers(self):
+    self.key_buffer = []
+    self.timestamps = []
+    self.x = 0
+
+  def newline(self):
+    if self.x==0:
+      return None
+    result = self.__result()
+    if not result:
+      return None
+    result.sentence = ''.join(self.key_buffer)
+    self.__init_buffers()
+    for x in range(self.window.getmaxyx()[1]-1):
+      self.window.addch(self.y, x, ' ')
+    return result
+
+  def __result(self):
     if len(self.timestamps) < 2:
-      return
-    time_diffs = []
+      return None
+
+    r = History()
     def reducer(x,y):
-      time_diffs.append(int((y-x)*1000))
+      r.diffs.append(int((y-x)*1000))
       return y
     reduce(reducer, self.timestamps)
-    log("Diffs: %s" % repr(time_diffs))
-    elapsed = self.timestamps[-1] - self.timestamps[0]
-    cpm = len(self.key_buffer) * (60.0 / elapsed) 
-    log('Elapsed: %4.1fs, CPM: %2.1f' % (elapsed, cpm))
+    r.elapsed = self.timestamps[-1] - self.timestamps[0]
+    r.cpm = len(self.key_buffer) * (60.0 / r.elapsed) 
 
-    l_x = 1
-    for diff in time_diffs:
-      color = 0
-      if diff > 200:
-        color = 1
-      elif diff > 160:
-        color = 2
-      if color>0: 
-        self.window.addch(self.y, l_x, self.key_buffer[l_x], curses.color_pair(color))
-      l_x += 1
+    x = 1
+    for diff in r.diffs:
+      if diff > THRESHOLD_FATAL:
+        r.offset_fatal[x] = True
+      elif diff > THRESHOLD_WARN:
+        r.offset_warn[x] = True
+      x = x + 1
+    return r
+
+def resized(stdscr, field):
+  stdscr.clear()
+  stdscr.border()
+  stdscr.addstr(1, 2, sentences[0])
+
+  height, width = stdscr.getmaxyx()
+
+  field_y = height-2
+  prompt = "~/victoria>"
+  prompt_x = 2
+  prompt_w = len(prompt)
+  stdscr.addstr(field_y, prompt_x, prompt[:-1], curses.color_pair(4))
+  stdscr.addstr(field_y, prompt_x+prompt_w-1, prompt[-1:])
+
+  field.window.resize(1, width-prompt_x-prompt_w-12)
+  field.window.mvwin(field_y, prompt_x + prompt_w + 1)
+  field.window.refresh()
+
+  stdscr.refresh()
+
+def clear_line(window, y):
+  _, w = window.getmaxyx()
+  for x in range(1, w-1-1):
+    try:
+      window.addch(y, x, ' ')
+    except: 
+      raise Exception("x=%d, y=%d" % (x, y))
+
+def redraw_history(stdscr, datas):
+  height, width = stdscr.getmaxyx()
+
+  start_y = 4 
+  last_y = height-3
+  x_sentence = 14
+  
+  y = last_y
+  lines = 0
+  for item in datas[::-1]:
+    lines += 1
+    if lines > height-10:
+      break
+
+    # Clear line 
+    clear_line(stdscr, y)
+
+    # Draw CPM
+    x = x_sentence - 1 - 4 - 2 - 4 - 1
+    stdscr.addstr(y, x, '%4.1f| %4d|' % (item.elapsed, item.cpm))
+
+    # Draw sentence 
+    x = x_sentence
+    offset = 0
+    for ch in item.sentence:
+      color = curses.color_pair(1)
+      if item.offset_warn.has_key(offset):
+        color = curses.color_pair(3)
+      elif item.offset_fatal.has_key(offset):
+        color = curses.color_pair(2)
+      stdscr.addch(y, x, ch, color)
+      x += 1
+      offset += 1
+
+    # Draw stat detail 
+    if lines==1: # can be configured by manual navigation 
+      for l in range(y-3, y):
+        clear_line(stdscr, l)
+
+      x = x_sentence 
+      for diff in item.diffs: 
+        x += 1
+        if diff < THRESHOLD_INFO:
+          continue
+        diff_s = '%3d' % diff
+        color = curses.color_pair(1)
+        if diff > THRESHOLD_FATAL:
+          color = curses.color_pair(2)
+        elif diff > THRESHOLD_WARN:
+          color = curses.color_pair(3)
+
+        if diff > 999:
+          diff_s = '!!!'
+        l_y = y-3
+        for ch in diff_s:
+          stdscr.addch(l_y, x, ch, color)
+          l_y += 1
+      y -= 3
+
+    y = y-1
+    if y < start_y:
+      break
+  stdscr.refresh()
 
 def main(stdscr):
   curses.noecho()
   curses.cbreak()
   stdscr.clear()
-  stdscr.border()
 
-  stdscr.addstr(1, 1, "# " + sentences[0])
-  curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
-  curses.init_pair(2, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
+  curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
+  curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
+  curses.init_pair(3, curses.COLOR_BLUE, curses.COLOR_BLACK)
+  curses.init_pair(4, curses.COLOR_GREEN, curses.COLOR_BLACK)
 
-  printable = re.compile(r'[A-Za-z \-0-9_.\'"|,;:~!@#$%^&*()+=/?`<>\[\]]')
-  sm = StateMachine(stdscr)
-  #sm.set_strict(sentences[0])
+  printable = re.compile(r'[A-Za-z \-0-9_.\'"|,;:~!@#$%^&*()+=/?`<>\[\]{}\\]')
+
+  field = InputField(stdscr.subwin(1,40,20,2))
+  resized(stdscr, field)
+  stdscr.refresh()
+
+  histories = []
+
   while True:
-    key = stdscr.getch(sm.y, sm.x)
+    key = field.getch()
+
     if key==0x11: # C-q
       break
     if key==0x0a: # enter 
-      sm.newline()
+      history = field.newline()
+      if history:
+        histories.append(history)
+        redraw_history(stdscr, histories)
       continue
     if key==0x7f: # backspace 
-      sm.backspace()
-      stdscr.addch(sm.y, sm.x, ' ')
+      field.backspace()
       continue
     if key==0x15: # C-u (reset)
-      for x in range(1, sm.reset()):
-        stdscr.addch(sm.y, x, ' ')
+      field.reset()
       continue
 
     ch = chr_if_possible(key)
     if not ch:
       if key==0x19a: # screen bounds resized
-        stdscr.clear()
-        stdscr.border()
-        stdscr.addstr(1, 1, "# " + sentences[0])
-        sm.redraw_keybuffer()
+        resized(stdscr, field)
+        field.redraw_keybuffer()
+        log('resized')
         continue
+      log('Unexpected special key: %d' % key)
+      continue
     if printable.match(ch):
-      if not sm.can_type(ch):
+      if not field.can_type(ch):
         log('beep!')
         continue
-      sm.add(ch)
-      stdscr.addch(sm.y, sm.x-1, ch)
-    
-    log('code: 0x%02x, char: %s, kb: %s' % (key, chr_if_possible(key), ''.join(sm.key_buffer)))
+      field.add(ch)
+    else: 
+      log('code: 0x%02x, char: %s' % (key, chr_if_possible(key)))
 
 curses.wrapper(main)
