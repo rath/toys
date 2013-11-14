@@ -79,10 +79,8 @@ class InputField:
     self.window.addch(self.y, self.x, ' ')
   
   def redraw_keybuffer(self):
-    i = 0
-    for ch in self.key_buffer:
+    for i, ch in enumerate(self.key_buffer):
       self.window.addch(self.y, i, ch)
-      i += 1
 
   def reset(self): # C-u
     typed = self.x
@@ -126,13 +124,11 @@ class InputField:
     r.elapsed = self.timestamps[-1] - self.timestamps[0]
     r.cpm = len(self.key_buffer) * (60.0 / r.elapsed) 
 
-    x = 1
-    for diff in r.diffs:
+    for x, diff in enumerate(r.diffs):
       if diff > THRESHOLD_FATAL:
-        r.offset_fatal[x] = True
+        r.offset_fatal[x+1] = True
       elif diff > THRESHOLD_WARN:
-        r.offset_warn[x] = True
-      x = x + 1
+        r.offset_warn[x+1] = True
     return r
 
 def resized(stdscr, field, histories):
@@ -188,8 +184,7 @@ def redraw_histories(stdscr, datas):
 
     # Draw sentence 
     x = x_sentence
-    offset = 0
-    for ch in item.sentence:
+    for offset, ch in enumerate(item.sentence):
       color = curses.color_pair(1)
       if item.offset_warn.has_key(offset):
         color = curses.color_pair(3)
@@ -197,7 +192,6 @@ def redraw_histories(stdscr, datas):
         color = curses.color_pair(2)
       stdscr.addch(y, x, ch, color)
       x += 1
-      offset += 1
 
     # Draw stat detail 
     if lines==1: # can be configured by manual navigation 
