@@ -18,7 +18,7 @@ TODO: 줄의 끝에 다다랐을때 addch가 깨지지 않게 하기
 """
 
 DEBUG = True
-THRESHOLD_INFO  = 45
+THRESHOLD_INFO  = 70
 THRESHOLD_WARN  = 170
 THRESHOLD_FATAL = 240
 
@@ -107,9 +107,12 @@ class InputField:
       return None
     result.sentence = ''.join(self.key_buffer)
     self.__init_buffers()
-    for x in range(self.window.getmaxyx()[1]-1):
-      self.window.addch(self.y, x, ' ')
     return result
+
+  def clear(self):
+    _, w = self.window.getmaxyx()
+    for x in range(w-1):
+      self.window.addch(self.y, x, ' ')
 
   def __result(self):
     if len(self.timestamps) < 2:
@@ -148,6 +151,7 @@ def resized(stdscr, field, histories):
 
   field.window.resize(1, width-prompt_x-prompt_w-12)
   field.window.mvwin(field_y, prompt_x + prompt_w + 1)
+  field.clear()
 
   redraw_histories(stdscr, histories)
 
@@ -253,6 +257,7 @@ def main(stdscr):
       if history:
         histories.append(history)
         redraw_histories(stdscr, histories)
+      field.clear()
       continue
     if key==0x7f: # backspace 
       field.backspace()
