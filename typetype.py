@@ -8,12 +8,17 @@ import curses
 import re
 import time
 
-sentences = [
-  "In every moment of your life, your skills are growing.",
-]
+#sentences = [
+#  "In every moment of your life, your skills are growing.",
+#]
+
+"""
+TODO: 줄의 끝에 다다랐을때 addch가 깨지지 않게 하기 
+
+"""
 
 DEBUG = True
-THRESHOLD_INFO  =  60
+THRESHOLD_INFO  = 45
 THRESHOLD_WARN  = 170
 THRESHOLD_FATAL = 240
 
@@ -127,10 +132,10 @@ class InputField:
       x = x + 1
     return r
 
-def resized(stdscr, field):
+def resized(stdscr, field, histories):
   stdscr.clear()
   stdscr.border()
-  stdscr.addstr(1, 2, sentences[0])
+#  stdscr.addstr(1, 2, sentences[0])
 
   height, width = stdscr.getmaxyx()
 
@@ -143,7 +148,8 @@ def resized(stdscr, field):
 
   field.window.resize(1, width-prompt_x-prompt_w-12)
   field.window.mvwin(field_y, prompt_x + prompt_w + 1)
-  field.window.refresh()
+
+  redraw_histories(stdscr, histories)
 
   stdscr.refresh()
 
@@ -155,7 +161,7 @@ def clear_line(window, y):
     except: 
       raise Exception("x=%d, y=%d" % (x, y))
 
-def redraw_history(stdscr, datas):
+def redraw_histories(stdscr, datas):
   height, width = stdscr.getmaxyx()
 
   start_y = 4 
@@ -166,7 +172,7 @@ def redraw_history(stdscr, datas):
   lines = 0
   for item in datas[::-1]:
     lines += 1
-    if lines > height-10:
+    if lines > height-8:
       break
 
     # Clear line 
@@ -231,8 +237,8 @@ def main(stdscr):
 
   printable = re.compile(r'[A-Za-z \-0-9_.\'"|,;:~!@#$%^&*()+=/?`<>\[\]{}\\]')
 
-  field = InputField(stdscr.subwin(1,40,20,2))
-  resized(stdscr, field)
+  field = InputField(stdscr.subwin(1,10,10,2))
+  resized(stdscr, field, [])
   stdscr.refresh()
 
   histories = []
@@ -246,7 +252,7 @@ def main(stdscr):
       history = field.newline()
       if history:
         histories.append(history)
-        redraw_history(stdscr, histories)
+        redraw_histories(stdscr, histories)
       continue
     if key==0x7f: # backspace 
       field.backspace()
@@ -258,7 +264,7 @@ def main(stdscr):
     ch = chr_if_possible(key)
     if not ch:
       if key==0x19a: # screen bounds resized
-        resized(stdscr, field)
+        resized(stdscr, field, histories)
         field.redraw_keybuffer()
         log('resized')
         continue
