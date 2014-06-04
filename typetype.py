@@ -242,8 +242,10 @@ def main(stdscr):
   histories = []
 
   while True:
-    key = field.getch()
-
+    try:
+      key = field.getch()
+    except KeyboardInterrupt:
+      break
     if key==0x11: # C-q
       break
     if key==0x0a: # enter 
